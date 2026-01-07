@@ -8,7 +8,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
         :root { --bg:#eef2f7; --card:#fff; --primary:#4f46e5; --ok:#10b981; --danger:#ef4444; }
-        body { margin:0; padding:10px; font-family:'Segoe UI', sans-serif; background:var(--bg); }
+        body { margin:0; padding:10px; font-family:'Segoe UI', sans-serif; background:var(--bg); padding-bottom: 80px; }
         .nav-header { background:#1e293b; color:#fff; padding:12px; border-radius:12px; display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
         .top-bar { text-align:center; padding:10px; font-weight:bold; color:#1e293b; font-size:18px; }
         
@@ -27,7 +27,7 @@
         input:checked + .slider:before { transform:translateX(20px); }
 
         .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); justify-content:center; align-items:center; z-index:1000; padding:10px; }
-        .modal-content { background:white; padding:15px; border-radius:15px; width:100%; max-width:500px; }
+        .modal-content { background:white; padding:15px; border-radius:15px; width:100%; max-width:500px; max-height: 85vh; overflow-y: auto; }
         .page-view { display:none; }
         .page-view.active { display:block; }
         
@@ -45,6 +45,12 @@
         .btn-save { width:100%; background:var(--ok); color:white; border:none; padding:14px; border-radius:10px; font-weight:bold; cursor:pointer; margin-top:15px; }
         .btn-ctrl { background:#64748b; color:white; border:none; padding:4px 10px; border-radius:5px; font-size:10px; cursor:pointer; margin-left:8px; }
         .rename-btn { background:none; border:none; color:var(--primary); cursor:pointer; font-size:12px; margin-left:5px; opacity: 0.6; }
+
+        /* Floating Add Button */
+        .add-btn-fixed { position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; background: var(--primary); color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border: none; cursor: pointer; z-index: 99; }
+        .device-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -58,11 +64,29 @@
 <div class="top-bar" id="clock">00:00:00</div>
 <div id="device-container" style="text-align: center; padding: 20px;">ડિવાઇસ શોધી રહ્યા છીએ...</div>
 
+<button class="add-btn-fixed" onclick="openAddModal()">+</button>
+
+<div id="add-modal" class="modal">
+    <div class="modal-content">
+        <h3 style="margin-top:0;">નવું ડિવાઇસ શોધો</h3>
+        <div id="search-list" style="max-height: 250px; overflow-y: auto; margin-bottom: 15px;"></div>
+        <div id="name-box" style="display:none;">
+            <p id="selected-id-display" style="font-size:12px; color:#64748b; font-weight:bold;"></p>
+            <input type="text" id="new-dev-name" placeholder="ડિવાઇસનું નામ (e.g. Kitchen)" style="width:100%; padding:12px; margin:10px 0; border:1px solid #ddd; border-radius:8px; box-sizing:border-box;">
+            <button onclick="saveNewDevice()" class="btn-save">સેવ કરો</button>
+        </div>
+        <button onclick="closeAddModal()" style="width:100%; margin-top:10px; padding:12px; border:none; background:#64748b; color:white; border-radius:10px;">બંધ કરો</button>
+    </div>
+</div>
+
 <div id="sched-modal" class="modal">
     <div class="modal-content">
         <div id="page-list" class="page-view active">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h3 style="margin:0;">Timers List</h3>
+                <div>
+                    <h3 style="margin:0;">Timers List</h3>
+                    <p id="current-timer-device" style="margin:0; font-size:12px; color:var(--primary); font-weight:bold;"></p>
+                </div>
                 <button onclick="switchPage('form')" style="background:var(--ok); color:white; border:none; width:35px; height:35px; border-radius:50%; font-size:22px; cursor:pointer;">+</button>
             </div>
             <div class="table-container">
@@ -100,29 +124,40 @@ const firebaseConfig = { apiKey: "AIzaSyBSHuKZ6ttE-08cwZcNMeclyqGWAxLTSts", data
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// અહીં તમારું સાચું UID અને ઈમેલ (જે ડાયનેમિકલી લૉગિનથી આવશે)
-const USER_EMAIL = "patelharesh.dsr@gmail.com"; 
-const MASTER_UID = "MASTER_USER"; 
+const USER_EMAIL = "patelharesh.dsr@gmail.com", MASTER_UID = "MASTER_USER"; 
 
-let openDevId = null, activeSchedId = null, currentData = null, selectedAction = 'ON';
+let openDevId = null, activeSchedId = null, currentData = null, selectedAction = 'ON', selectedNewDevId = null;
 
 function init() { 
-    // યુઝરનેમ સેટ કરો
     const displayName = USER_EMAIL.split('@')[0];
     document.getElementById('user-display').innerText = "ID: " + displayName;
-
     db.ref().on('value', snap => { 
         currentData = snap.val(); 
         renderUI(); 
         if(activeSchedId) renderFormSwitches(); 
     }); 
     setAction('ON'); 
+    setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB'); }, 1000);
 }
 
 function getSwName(devId, relayKey) {
     const d = currentData.users_devices_status[devId];
     if (d && d.names && d.names[relayKey]) return d.names[relayKey];
     return "Switch " + relayKey.replace('relay', '');
+}
+
+function renameDevice(devId, oldName) {
+    const newName = prompt("ડિવાઇસનું નવું નામ લખો:", oldName);
+    if (newName && newName.trim() !== "") {
+        db.ref(`users/${MASTER_UID}/devices/${devId}`).update({ name: newName.trim() });
+    }
+}
+
+function renameSwitch(devId, relay, oldName) {
+    const newName = prompt("સ્વિચનું નવું નામ લખો:", oldName);
+    if (newName && newName.trim() !== "") {
+        db.ref(`users_devices_status/${devId}/names`).update({ [relay]: newName.trim() });
+    }
 }
 
 function renderUI() {
@@ -132,22 +167,24 @@ function renderUI() {
     const userDevices = (currentData.users && currentData.users[MASTER_UID]) ? currentData.users[MASTER_UID].devices : {};
 
     box.innerHTML = "";
-    Object.keys(statusData).forEach(id => {
+    Object.keys(userDevices).forEach(id => {
         const d = statusData[id] || {};
-        // ડિવાઇસનું સાચું નામ ચેક કરો
-        const deviceDisplayName = (userDevices[id] && userDevices[id].name) ? userDevices[id].name : id;
+        const deviceDisplayName = userDevices[id].name || id;
         
         const isAllOn = d.relay0 && d.relay1 && d.relay2 && d.relay3;
         const card = document.createElement('div');
         card.className = `card ${openDevId === id ? 'active' : ''}`;
         card.innerHTML = `
-            <div class="card-header" onclick="toggleCard('${id}')">
-                <span>${deviceDisplayName}</span>
-                <span>${openDevId === id ? '▴' : '▾'}</span>
+            <div class="card-header">
+                <div onclick="toggleCard('${id}')" style="flex:1;">
+                    <span>${deviceDisplayName}</span>
+                    <span style="margin-left:5px;">${openDevId === id ? '▴' : '▾'}</span>
+                </div>
+                <button class="rename-btn" onclick="renameDevice('${id}', '${deviceDisplayName}')">✎</button>
             </div>
             <div class="card-body" style="display:${openDevId === id ? 'block' : 'none'}">
                 <div class="master-row"><b>Master Control</b><label class="switch"><input type="checkbox" ${isAllOn?'checked':''} onchange="fastToggleMaster('${id}', this.checked)"><span class="slider"></span></label>
-                <button class="btn-ctrl" style="background:var(--primary)" onclick="openModal('${id}')">📅 Timers</button></div>
+                <button class="btn-ctrl" style="background:var(--primary)" onclick="openModal('${id}', '${deviceDisplayName}')">📅 Timers</button></div>
                 ${[0,1,2,3].map(i => {
                     const rKey = 'relay'+i;
                     const name = getSwName(id, rKey);
@@ -162,27 +199,18 @@ function renderUI() {
     });
 }
 
-function renameSwitch(devId, relay, oldName) {
-    const newName = prompt("સ્વિચનું નવું નામ લખો:", oldName);
-    if (newName && newName.trim() !== "") {
-        db.ref(`users_devices_status/${devId}/names`).update({ [relay]: newName.trim() });
-    }
-}
-
-function renderFormSwitches() {
-    const container = document.getElementById('sw-selectors');
-    if(!activeSchedId) return;
-    container.innerHTML = [0,1,2,3].map(i => {
-        const rKey = 'relay'+i;
-        return `<div class="btn-box sw-opt" data-val="${rKey}">${getSwName(activeSchedId, rKey)}</div>`;
-    }).join('');
-}
-
 function toggleCard(id) { openDevId = (openDevId === id) ? null : id; renderUI(); }
 function fastToggleRelay(id, relay, newState) { db.ref(`users_devices_status/${id}`).update({ [relay]: newState }); }
 function fastToggleMaster(id, newState) { db.ref(`users_devices_status/${id}`).update({ relay0: newState, relay1: newState, relay2: newState, relay3: newState }); }
 
-function openModal(id) { activeSchedId = id; renderFormSwitches(); switchPage('list'); document.getElementById('sched-modal').style.display='flex'; loadTimerList(); }
+function openModal(id, name) { 
+    activeSchedId = id; 
+    document.getElementById('current-timer-device').innerText = "Device: " + name;
+    renderFormSwitches(); 
+    switchPage('list'); 
+    document.getElementById('sched-modal').style.display='flex'; 
+    loadTimerList(); 
+}
 function closeModal() { document.getElementById('sched-modal').style.display='none'; }
 function switchPage(p) { document.querySelectorAll('.page-view').forEach(v => v.classList.remove('active')); document.getElementById('page-'+p).classList.add('active'); }
 
@@ -221,7 +249,6 @@ function loadTimerList() {
                 const t = tNode.val(), tid = tNode.key, sw = swNode.key;
                 const swDisplayName = getSwName(activeSchedId, sw);
                 const row = document.createElement('tr');
-                row.className = "edit-row";
                 row.innerHTML = `
                     <td onclick="editTimer('${sw}','${t.time}','${t.days}','${t.action}')">${swDisplayName}</td>
                     <td onclick="editTimer('${sw}','${t.time}','${t.days}','${t.action}')">${t.time}</td>
@@ -245,7 +272,60 @@ function editTimer(sw, time, days, action) {
 
 function toggleEnabled(sw, tid, status) { db.ref(`users_devices_status/${activeSchedId}/timers/${sw}/${tid}`).update({enabled: status}); }
 function deleteT(sk, tk) { if(confirm("Delete this timer?")) db.ref(`users_devices_status/${activeSchedId}/timers/${sk}/${tk}`).remove(); }
-setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB'); }, 1000);
+
+function renderFormSwitches() {
+    const container = document.getElementById('sw-selectors');
+    if(!activeSchedId) return;
+    container.innerHTML = [0,1,2,3].map(i => {
+        const rKey = 'relay'+i;
+        return `<div class="btn-box sw-opt" data-val="${rKey}">${getSwName(activeSchedId, rKey)}</div>`;
+    }).join('');
+}
+
+// --- ADD DEVICE LOGIC ---
+function openAddModal() {
+    document.getElementById('add-modal').style.display='flex';
+    const list = document.getElementById('search-list');
+    list.innerHTML = '<div style="text-align:center;"><div class="loader"></div><br>સ્કેન થઈ રહ્યું છે...</div>';
+    
+    db.ref('users_devices_status').once('value', snap => {
+        list.innerHTML = "";
+        const allStatus = snap.val() || {};
+        const myDevices = (currentData.users && currentData.users[MASTER_UID]) ? currentData.users[MASTER_UID].devices : {};
+        
+        Object.keys(allStatus).forEach(id => {
+            if(!myDevices || !myDevices[id]) {
+                const d = document.createElement('div');
+                d.className = 'device-item';
+                d.innerHTML = `<b>Device ID:</b> ${id} <span style="float:right; color:var(--primary);">+ Add</span>`;
+                d.onclick = () => {
+                    selectedNewDevId = id;
+                    document.getElementById('selected-id-display').innerText = "ID: " + id;
+                    document.getElementById('name-box').style.display = 'block';
+                    list.style.display = 'none';
+                };
+                list.appendChild(d);
+            }
+        });
+        if(!list.innerHTML) list.innerHTML = "<p style='text-align:center; padding:20px;'>કોઈ નવા ડિવાઇસ મળ્યા નથી.</p>";
+    });
+}
+
+function saveNewDevice() {
+    const name = document.getElementById('new-dev-name').value;
+    if(!name) return alert("નામ લખો!");
+    db.ref(`users/${MASTER_UID}/devices/${selectedNewDevId}`).set({ name: name.trim() }).then(() => {
+        alert("ડિવાઇસ ઉમેરાઈ ગયું!");
+        location.reload();
+    });
+}
+
+function closeAddModal() {
+    document.getElementById('add-modal').style.display='none';
+    document.getElementById('name-box').style.display = 'none';
+    document.getElementById('search-list').style.display = 'block';
+}
+
 init();
 </script>
 </body>
