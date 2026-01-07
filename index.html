@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="gu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home Automation - Login</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+        }
+        .container { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2); 
+            width: 350px; 
+            text-align: center;
+        }
+        h2 { color: #333; margin-bottom: 20px; }
+        input { 
+            width: 100%; 
+            padding: 12px; 
+            margin: 10px 0; 
+            border: 1px solid #ddd; 
+            border-radius: 6px; 
+            box-sizing: border-box; 
+            font-size: 16px;
+        }
+        button { 
+            width: 100%; 
+            padding: 12px; 
+            background: #764ba2; 
+            color: white; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-size: 16px;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        button:hover { background: #5a377d; }
+        .toggle-link { 
+            margin-top: 15px; 
+            font-size: 14px; 
+            cursor: pointer; 
+            color: #667eea; 
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 id="auth-title">લોગિન</h2>
+    <input type="email" id="email" placeholder="ઈમેલ (Email)">
+    <input type="password" id="password" placeholder="પાસવર્ડ (Password)">
+    <button id="auth-btn">લોગિન કરો</button>
+    <div class="toggle-link" id="toggle-auth">નવું એકાઉન્ટ બનાવો (Register)</div>
+</div>
+
+<script type="module">
+    // Firebase મોડ્યુલ્સ ઇમ્પોર્ટ કરવા
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+    // --- તમારી Firebase વિગતો અહીં બદલો ---
+	const firebaseConfig = {
+  apiKey: "AIzaSyBSHuKZ6ttE-08cwZcNMeclyqGWAxLTSts",
+  authDomain: "esp-devices-d862a.firebaseapp.com",
+  databaseURL: "https://esp-devices-d862a-default-rtdb.firebaseio.com",
+  projectId: "esp-devices-d862a",
+  storageBucket: "esp-devices-d862a.firebasestorage.app",
+  messagingSenderId: "1057378773138",
+  appId: "1:1057378773138:web:cc8002d19714d211195e4b",
+  measurementId: "G-T6R9DL6T3Q"
+};
+
+    // Firebase Initialize કરો
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    const emailField = document.getElementById('email');
+    const passwordField = document.getElementById('password');
+    const authBtn = document.getElementById('auth-btn');
+    const authTitle = document.getElementById('auth-title');
+    const toggleLink = document.getElementById('toggle-auth');
+
+    let isLoginMode = true;
+
+    // Login/Register Toggle Logic
+    toggleLink.addEventListener('click', () => {
+        isLoginMode = !isLoginMode;
+        authTitle.innerText = isLoginMode ? "લોગિન" : "રજીસ્ટ્રેશન";
+        authBtn.innerText = isLoginMode ? "લોગિન કરો" : "સાઇન અપ";
+        toggleLink.innerText = isLoginMode ? "નવું એકાઉન્ટ બનાવો (Register)" : "પહેલેથી એકાઉન્ટ છે? લોગિન કરો";
+    });
+
+    // Button Click Logic
+    authBtn.addEventListener('click', () => {
+        const email = emailField.value;
+        const password = passwordField.value;
+
+        if (!email || !password) {
+            alert("મહેરબાની કરીને બધી વિગતો ભરો!");
+            return;
+        }
+
+        if (isLoginMode) {
+            signInWithEmailAndPassword(auth, email, password)
+                .then((userCredential) => {
+                    alert("લોગિન સફળ!");
+                    // અહીં તમે બીજા પેજ પર મોકલી શકો છો
+                     window.location.href = "Dashboard-V1.0.html";
+					 //window.location.href = "dashboard.html";
+                })
+                .catch((error) => alert("ભૂલ: " + error.message));
+        } else {
+            createUserWithEmailAndPassword(auth, email, password)
+                .then((userCredential) => {
+                    alert("એકાઉન્ટ સફળતાપૂર્વક બની ગયું!");
+                })
+                .catch((error) => alert("ભૂલ: " + error.message));
+        }
+    });
+
+    // ચેક કરો કે યુઝર લોગિન છે કે નહીં
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            console.log("Logged in user UID:", user.uid);
+        }
+    });
+</script>
+
+</body>
+</html>
+ESP-Login page.html
+Displaying ESP-Login page.html.
