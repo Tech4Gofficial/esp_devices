@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="gu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard-V1.0</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <style>
+        :root { --bg:#eef2f7; --card:#fff; --primary:#4f46e5; --ok:#10b981; --danger:#ef4444; }
+        body { margin:0; padding:10px; font-family:'Segoe UI', sans-serif; background:var(--bg); }
+        .nav-header { background:#1e293b; color:#fff; padding:12px; border-radius:12px; display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+        .top-bar { text-align:center; padding:10px; font-weight:bold; color:#1e293b; font-size:18px; }
+        
+        .card { background:var(--card); border-radius:12px; margin-bottom:10px; border:1px solid #ddd; overflow:hidden; transition: 0.3s; }
+        .card.active { border-color:var(--primary); box-shadow:0 4px 12px rgba(79,70,229,.15); }
+        .card-header { padding:15px; cursor:pointer; display:flex; justify-content:space-between; background:#f8fafc; font-weight:bold; align-items:center; }
+        .card-body { padding:15px; border-top:1px solid #eee; }
+        
+        .master-row { display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; padding:10px; border-radius:10px; margin-bottom:15px; }
+        
+        .switch { position:relative; width:40px; height:20px; display:inline-block; cursor: pointer; }
+        .switch input { opacity:0; width:0; height:0;}
+        .slider { position:absolute; inset:0; background:#cbd5e1; border-radius:34px; transition:.3s; cursor:pointer; }
+        .slider:before { content:""; position:absolute; height:14px; width:14px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.3s; }
+        input:checked + .slider { background:var(--ok); }
+        input:checked + .slider:before { transform:translateX(20px); }
+
+        .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); justify-content:center; align-items:center; z-index:1000; padding:10px; }
+        .modal-content { background:white; padding:15px; border-radius:15px; width:100%; max-width:500px; }
+        .page-view { display:none; }
+        .page-view.active { display:block; }
+        
+        .btn-box { padding:8px; border:1px solid #ddd; border-radius:8px; cursor:pointer; font-size:11px; background:#f9fafb; margin:2px; display:inline-block; min-width:40px; text-align:center; }
+        .btn-box.active { background:var(--primary); color:white; border-color:var(--primary); }
+        
+        .act-btn { flex:1; padding:10px; border:1px solid #ddd; text-align:center; cursor:pointer; font-size:12px; font-weight:bold; background:#f9fafb; border-radius:8px; }
+        .act-btn.on-active { background:var(--ok); color:white; border-color:var(--ok); }
+        .act-btn.off-active { background:var(--danger); color:white; border-color:var(--danger); }
+
+        .table-container { width:100%; overflow-x:auto; margin-top:10px; }
+        table { width:100%; border-collapse:collapse; font-size:11px; white-space: nowrap; }
+        th, td { border:1px solid #eee; padding:10px 5px; text-align:center; vertical-align: middle; }
+        
+        .btn-save { width:100%; background:var(--ok); color:white; border:none; padding:14px; border-radius:10px; font-weight:bold; cursor:pointer; margin-top:15px; }
+        .btn-ctrl { background:#64748b; color:white; border:none; padding:4px 10px; border-radius:5px; font-size:10px; cursor:pointer; margin-left:8px; }
+        .rename-btn { background:none; border:none; color:var(--primary); cursor:pointer; font-size:12px; margin-left:5px; opacity: 0.6; }
+    </style>
+</head>
+<body>
+
+<div class="nav-header">
+    <div id="user-display" style="color:#fbbf24; font-weight:bold;">ID: patelharesh.dsr</div>
+    <div style="font-weight:900;">SMART HOME</div>
+    <button onclick="location.reload()" style="background:var(--danger); color:white; border:none; padding:5px 10px; border-radius:6px; font-size:10px; cursor:pointer;">REFRESH</button>
+</div>
+
+<div class="top-bar" id="clock">00:00:00</div>
+<div id="device-container" style="text-align: center; padding: 20px;">ડિવાઇસ શોધી રહ્યા છીએ...</div>
+
+<div id="sched-modal" class="modal">
+    <div class="modal-content">
+        <div id="page-list" class="page-view active">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0;">Timers List</h3>
+                <button onclick="switchPage('form')" style="background:var(--ok); color:white; border:none; width:35px; height:35px; border-radius:50%; font-size:22px; cursor:pointer;">+</button>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>SW</th><th>Time</th><th>Day</th><th>Act</th><th>On/Off</th><th>X</th></tr></thead>
+                    <tbody id="timer-list-body"></tbody>
+                </table>
+            </div>
+            <button onclick="closeModal()" style="width:100%; margin-top:15px; padding:12px; border-radius:10px; border:none; background:#64748b; color:white; font-weight:bold; cursor:pointer;">CLOSE</button>
+        </div>
+
+        <div id="page-form" class="page-view">
+            <h3>Set Timer</h3>
+            <p style="font-size:11px; font-weight:bold; margin:5px 0;">Switches: <button class="btn-ctrl" onclick="toggleAll('sw-opt')">All</button></p>
+            <div id="sw-selectors"></div>
+            <p style="font-size:11px; font-weight:bold; margin:10px 0 5px;">Days: <button class="btn-ctrl" onclick="toggleAll('day-opt')">All</button></p>
+            <div id="day-selectors">
+                <div class="btn-box day-opt" data-val="Mon">M</div><div class="btn-box day-opt" data-val="Tue">T</div><div class="btn-box day-opt" data-val="Wed">W</div><div class="btn-box day-opt" data-val="Thu">T</div><div class="btn-box day-opt" data-val="Fri">F</div><div class="btn-box day-opt" data-val="Sat">S</div><div class="btn-box day-opt" data-val="Sun">S</div>
+            </div>
+            <div style="display:flex; gap:10px; margin-top:15px; align-items:center;">
+                <input type="time" id="s-time" style="flex:1.5; padding:10px; border:1px solid #ddd; border-radius:8px;">
+                <div style="flex:2; display:flex; gap:5px;">
+                    <div id="act-on" class="act-btn" onclick="setAction('ON')">ON</div>
+                    <div id="act-off" class="act-btn" onclick="setAction('OFF')">OFF</div>
+                </div>
+            </div>
+            <button onclick="saveSchedule()" class="btn-save">SAVE TIMER</button>
+            <button onclick="resetForm(); switchPage('list');" style="width:100%; margin-top:10px; background:none; border:none; color:var(--primary); font-weight:bold; cursor:pointer;">Back to List</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const firebaseConfig = { apiKey: "AIzaSyBSHuKZ6ttE-08cwZcNMeclyqGWAxLTSts", databaseURL: "https://esp-devices-d862a-default-rtdb.firebaseio.com" };
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// અહીં તમારું સાચું UID અને ઈમેલ (જે ડાયનેમિકલી લૉગિનથી આવશે)
+const USER_EMAIL = "patelharesh.dsr@gmail.com"; 
+const MASTER_UID = "MASTER_USER"; 
+
+let openDevId = null, activeSchedId = null, currentData = null, selectedAction = 'ON';
+
+function init() { 
+    // યુઝરનેમ સેટ કરો
+    const displayName = USER_EMAIL.split('@')[0];
+    document.getElementById('user-display').innerText = "ID: " + displayName;
+
+    db.ref().on('value', snap => { 
+        currentData = snap.val(); 
+        renderUI(); 
+        if(activeSchedId) renderFormSwitches(); 
+    }); 
+    setAction('ON'); 
+}
+
+function getSwName(devId, relayKey) {
+    const d = currentData.users_devices_status[devId];
+    if (d && d.names && d.names[relayKey]) return d.names[relayKey];
+    return "Switch " + relayKey.replace('relay', '');
+}
+
+function renderUI() {
+    if (!currentData) return;
+    const box = document.getElementById('device-container');
+    const statusData = currentData.users_devices_status || {};
+    const userDevices = (currentData.users && currentData.users[MASTER_UID]) ? currentData.users[MASTER_UID].devices : {};
+
+    box.innerHTML = "";
+    Object.keys(statusData).forEach(id => {
+        const d = statusData[id] || {};
+        // ડિવાઇસનું સાચું નામ ચેક કરો
+        const deviceDisplayName = (userDevices[id] && userDevices[id].name) ? userDevices[id].name : id;
+        
+        const isAllOn = d.relay0 && d.relay1 && d.relay2 && d.relay3;
+        const card = document.createElement('div');
+        card.className = `card ${openDevId === id ? 'active' : ''}`;
+        card.innerHTML = `
+            <div class="card-header" onclick="toggleCard('${id}')">
+                <span>${deviceDisplayName}</span>
+                <span>${openDevId === id ? '▴' : '▾'}</span>
+            </div>
+            <div class="card-body" style="display:${openDevId === id ? 'block' : 'none'}">
+                <div class="master-row"><b>Master Control</b><label class="switch"><input type="checkbox" ${isAllOn?'checked':''} onchange="fastToggleMaster('${id}', this.checked)"><span class="slider"></span></label>
+                <button class="btn-ctrl" style="background:var(--primary)" onclick="openModal('${id}')">📅 Timers</button></div>
+                ${[0,1,2,3].map(i => {
+                    const rKey = 'relay'+i;
+                    const name = getSwName(id, rKey);
+                    return `
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px; align-items:center;">
+                        <span><b>${name}</b> <button class="rename-btn" onclick="renameSwitch('${id}', '${rKey}', '${name}')">✎</button></span>
+                        <label class="switch"><input type="checkbox" ${d[rKey]?'checked':''} onchange="fastToggleRelay('${id}', '${rKey}', this.checked)"><span class="slider"></span></label>
+                    </div>`;
+                }).join('')}
+            </div>`;
+        box.appendChild(card);
+    });
+}
+
+function renameSwitch(devId, relay, oldName) {
+    const newName = prompt("સ્વિચનું નવું નામ લખો:", oldName);
+    if (newName && newName.trim() !== "") {
+        db.ref(`users_devices_status/${devId}/names`).update({ [relay]: newName.trim() });
+    }
+}
+
+function renderFormSwitches() {
+    const container = document.getElementById('sw-selectors');
+    if(!activeSchedId) return;
+    container.innerHTML = [0,1,2,3].map(i => {
+        const rKey = 'relay'+i;
+        return `<div class="btn-box sw-opt" data-val="${rKey}">${getSwName(activeSchedId, rKey)}</div>`;
+    }).join('');
+}
+
+function toggleCard(id) { openDevId = (openDevId === id) ? null : id; renderUI(); }
+function fastToggleRelay(id, relay, newState) { db.ref(`users_devices_status/${id}`).update({ [relay]: newState }); }
+function fastToggleMaster(id, newState) { db.ref(`users_devices_status/${id}`).update({ relay0: newState, relay1: newState, relay2: newState, relay3: newState }); }
+
+function openModal(id) { activeSchedId = id; renderFormSwitches(); switchPage('list'); document.getElementById('sched-modal').style.display='flex'; loadTimerList(); }
+function closeModal() { document.getElementById('sched-modal').style.display='none'; }
+function switchPage(p) { document.querySelectorAll('.page-view').forEach(v => v.classList.remove('active')); document.getElementById('page-'+p).classList.add('active'); }
+
+function toggleAll(cls) {
+    const items = document.querySelectorAll('.' + cls);
+    const allActive = Array.from(items).every(i => i.classList.contains('active'));
+    items.forEach(i => allActive ? i.classList.remove('active') : i.classList.add('active'));
+}
+
+function setAction(act) {
+    selectedAction = act;
+    document.getElementById('act-on').classList.toggle('on-active', act === 'ON');
+    document.getElementById('act-off').classList.toggle('off-active', act === 'OFF');
+}
+
+function resetForm() { document.querySelectorAll('.btn-box').forEach(b => b.classList.remove('active')); document.getElementById('s-time').value = ""; setAction('ON'); }
+
+document.addEventListener('click', e => { if(e.target.classList.contains('sw-opt') || e.target.classList.contains('day-opt')) e.target.classList.toggle('active'); });
+
+function saveSchedule() {
+    const time = document.getElementById('s-time').value;
+    const sws = Array.from(document.querySelectorAll('.sw-opt.active')).map(b => b.dataset.val);
+    const selectedDaysArr = Array.from(document.querySelectorAll('.day-opt.active')).map(b => b.dataset.val);
+    const dys = (selectedDaysArr.length === 7) ? "All Days" : (selectedDaysArr.join(",") || "All Days");
+    if(!time || !sws.length) return alert("વિગતો અધૂરી છે!");
+    sws.forEach(sw => { db.ref(`users_devices_status/${activeSchedId}/timers/${sw}`).push({ time, action: selectedAction, days: dys, enabled: true }); });
+    resetForm(); switchPage('list');
+}
+
+function loadTimerList() {
+    const body = document.getElementById('timer-list-body');
+    db.ref(`users_devices_status/${activeSchedId}/timers`).on('value', snap => {
+        body.innerHTML = "";
+        snap.forEach(swNode => {
+            swNode.forEach(tNode => {
+                const t = tNode.val(), tid = tNode.key, sw = swNode.key;
+                const swDisplayName = getSwName(activeSchedId, sw);
+                const row = document.createElement('tr');
+                row.className = "edit-row";
+                row.innerHTML = `
+                    <td onclick="editTimer('${sw}','${t.time}','${t.days}','${t.action}')">${swDisplayName}</td>
+                    <td onclick="editTimer('${sw}','${t.time}','${t.days}','${t.action}')">${t.time}</td>
+                    <td onclick="editTimer('${sw}','${t.time}','${t.days}','${t.action}')">${t.days}</td>
+                    <td onclick="editTimer('${sw}','${t.time}','${t.days}','${t.action}')"><b style="color:${t.action==='ON'?'#10b981':'#ef4444'}">${t.action}</b></td>
+                    <td><label class="switch"><input type="checkbox" ${t.enabled?'checked':''} onchange="toggleEnabled('${sw}','${tid}',this.checked)"><span class="slider"></span></label></td>
+                    <td onclick="deleteT('${sw}','${tid}')" style="color:red; font-weight:bold; cursor:pointer;">X</td>`;
+                body.appendChild(row);
+            });
+        });
+    });
+}
+
+function editTimer(sw, time, days, action) {
+    switchPage('form');
+    document.getElementById('s-time').value = time;
+    setAction(action);
+    document.querySelectorAll('.sw-opt').forEach(b => b.classList.toggle('active', b.dataset.val === sw));
+    document.querySelectorAll('.day-opt').forEach(b => b.classList.toggle('active', (days === "All Days" || days.includes(b.dataset.val))));
+}
+
+function toggleEnabled(sw, tid, status) { db.ref(`users_devices_status/${activeSchedId}/timers/${sw}/${tid}`).update({enabled: status}); }
+function deleteT(sk, tk) { if(confirm("Delete this timer?")) db.ref(`users_devices_status/${activeSchedId}/timers/${sk}/${tk}`).remove(); }
+setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB'); }, 1000);
+init();
+</script>
+</body>
+</html>
